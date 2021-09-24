@@ -25,7 +25,7 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
     } else {
       arg = argv[1];
     }
-    chdir(argv[1]);
+    chdir(arg);
     char* abuf = malloc(4096);
     getcwd(abuf, 4096);
     setenv("PWD", abuf, 1);
@@ -47,7 +47,6 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
         close(input);
       if (output != STDOUT_FILENO)
         close(output);
-
     }
   } else {
     pid_t pid = fork();
@@ -134,12 +133,13 @@ int exec_vect(char *const argv[]) {
 int main() {
   char hostname[128];
   gethostname(hostname, 128);
+  setenv("PROMPT", "$ ", 0);
 
   setenv("PATH",
       "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin", 0);
 
   while (1) {
-    char* str = readline("$ ");
+    char* str = readline(getenv("PROMPT"));
     if (str == NULL) {
       exit(0);
     }
@@ -151,11 +151,11 @@ int main() {
       int i = 0;
       int alen = 0;
       int word = 0;
+      int instr = 0;
       argv[0] = malloc(MAX_WORD_LENGTH);
       for (i = 0; i < len; i++) {
-        if (str[i] == ' ' && alen > 0 && (i + 1) < len) {
+        if (str[i] == ' ' && alen > 0 && (i + 1) < len && instr == 0) {
           argv[word][alen] = '\0';
-          
           word += 1;
           alen = 0;
           argv[word] = malloc(MAX_WORD_LENGTH);
@@ -168,17 +168,42 @@ int main() {
           fprintf(stderr, "Word length limit of %d exceeded\n",
               MAX_WORD_LENGTH);
           break;
-        } else if (str[i] != ' ') {
+        } else if (str[i] == '"') {
+          if (instr == 0)
+            instr = 1;
+          else
+            instr = 0;
+        } else if (str[i] != ' ' || instr == 1) {
           argv[word][alen] = str[i];
           alen += 1;
         }
       }
 
+      if (instr == 1) {
+        fprintf(stderr, "warning: unfinished string\n");
+      }
+
       argv[word][alen] = '\0';
       argv[word+1] = NULL;
+      int nofree[MAX_WORDS];
+      for (i = 0; i <= word; i++) {
+        if (argv[i][0] == '$') {
+          char envval[MAX_WORD_LENGTH];
+          int si;
+          for (si = 1; argv[i][si] != '\0'; si++) {
+            envval[si - 1] = argv[i][si];
+          }
+          envval[si - 1] = '\0';
+          free(argv[i]);
+          nofree[i] = 1;
+          argv[i] = getenv(envval);
+        }
+      }
+
       exec_vect(argv);
       for (i = 0; i <= word; i++) {
-        free(argv[i]);
+        if (nofree[i] != 1)
+          free(argv[i]);
       }
     }
     add_history(str);
