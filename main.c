@@ -18,6 +18,8 @@
 #define MAX_WORD_LENGTH 128
 
 int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
+  int close_input = (input == STDIN_FILENO) ? 1 : 0;
+  int close_output = (output == STDOUT_FILENO) ? 1 : 0;
   if (strcmp(file, "cd") == 0) {
     char* arg;
     if (argv[1] == NULL) {
@@ -43,9 +45,9 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
         write(output, environ[i], strlen(environ[i]));
         write(output, "\n", 1);
       }
-      if (input != STDIN_FILENO)
+      if (close_input == 0)
         close(input);
-      if (output != STDOUT_FILENO)
+      if (close_output == 0)
         close(output);
     }
   } else {
@@ -55,9 +57,14 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
         break;
   
       case 0: /* Child */
-        dup2(input, STDIN_FILENO);
-        dup2(output, STDOUT_FILENO);
-        setvbuf(stdout, NULL, _IONBF, 0);
+        if (close_input == 0) {
+          dup2(input, STDIN_FILENO);
+          setvbuf(stdin, NULL, _IONBF, 0);
+        }
+        if (close_output == 0) {
+          dup2(output, STDOUT_FILENO);
+          setvbuf(stdout, NULL, _IONBF, 0);
+        }
         execvp(file, argv);
         fprintf(stderr, "%s: command not found or could not be executed\n",
             file);
@@ -65,9 +72,9 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
       default: /* Parent */
         int stat_loc;
         waitpid(pid, &stat_loc, 0);
-        if (input != STDIN_FILENO)
+        if (close_input == 0)
           close(input);
-        if (output != STDOUT_FILENO)
+        if (close_output == 0)
           close(output);
         return stat_loc;
     }
@@ -78,7 +85,6 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
 struct command {
   int input;
   int output;
-  char* file;
   char* argv[MAX_WORDS + 1];
 };
 
@@ -96,17 +102,21 @@ int exec_vect(char *const argv[]) {
   for (i = 0; argv[i] != NULL; i++) {
     if (strcmp(argv[i], "|") == 0) {
       commands[c]->argv[a] = NULL;
+      
       int pipes[2];
       pipe(pipes);
+      
       commands[c]->output = pipes[1];
-      struct command cmd;
       c++; // heh
       a = 0;
+      
+      struct command cmd;
       commands[c] = &cmd;
       commands[c]->input = pipes[0];
       commands[c]->output = STDOUT_FILENO;
       commands[c]->argv[0] = NULL;
     } else {
+      printf("Adding '%s' to command %d\n", argv[i], c);
       commands[c]->argv[a] = malloc(MAX_WORD_LENGTH);
       strcpy(commands[c]->argv[a], argv[i]);
       a++;
@@ -119,8 +129,11 @@ int exec_vect(char *const argv[]) {
   // now, execute all that
   for (i = 0; commands[i] != NULL; i++) {
     if (commands[i]->argv[0] != NULL) {
+      fprintf(stderr, "exec command '%s' (%d) input %d output %d\n",
+          commands[i]->argv[0], i, commands[i]->input, commands[i]->output);
       exec_and_wait(commands[i]->input, commands[i]->output,
           commands[i]->argv[0], commands[i]->argv);
+      fprintf(stderr, "finished\n");
       // clean up
       for (n = 0; commands[i]->argv[n] != NULL; n++) {
         free(commands[i]->argv[n]);
