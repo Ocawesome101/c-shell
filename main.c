@@ -33,6 +33,22 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
     return 0;
   } else if (strcmp(file, "exit") == 0) {
     exit(0);
+  } else if (strcmp(file, "set") == 0) {
+    if (argv[1] != NULL && argv[2] != NULL) {
+      setenv(argv[1], argv[2], 1);
+    } else {
+      extern char **environ;
+      int i;
+      for (i = 0; environ[i] != NULL; i++) {
+        write(output, environ[i], strlen(environ[i]));
+        write(output, "\n", 1);
+      }
+      if (input != STDIN_FILENO)
+        close(input);
+      if (output != STDOUT_FILENO)
+        close(output);
+
+    }
   } else {
     pid_t pid = fork();
     switch (pid) {
@@ -118,6 +134,10 @@ int exec_vect(char *const argv[]) {
 int main() {
   char hostname[128];
   gethostname(hostname, 128);
+
+  setenv("PATH",
+      "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin", 0);
+
   while (1) {
     char* str = readline("$ ");
     if (str == NULL) {
