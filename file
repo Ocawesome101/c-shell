@@ -50,10 +50,6 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
       default: /* Parent */
         int stat_loc;
         waitpid(pid, &stat_loc, 0);
-        if (input != STDIN_FILENO)
-          close(input);
-        if (output != STDOUT_FILENO)
-          close(output);
         return stat_loc;
     }
   }
