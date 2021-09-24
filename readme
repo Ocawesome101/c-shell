@@ -1,0 +1,5 @@
+A simple interactive shell written in C.  Supports piping and environment variable substitution, and the `set`, `cd`, and `exit` builtins.  Uses `readline` for line editing.
+
+`build` is a script containing the GCC command to compile the shell.
+
+Copyright (c) 2021 Ocawesome101 under the DSLv2.
