@@ -14,6 +14,10 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+#ifndef NO_DEBUG
+#define DEBUG
+#endif
+
 #define MAX_WORDS 64
 #define MAX_WORD_LENGTH 128
 
@@ -82,62 +86,89 @@ int exec_and_wait(int input, int output, const char *file, char *const argv[]) {
   return 0;
 }
 
-struct command {
+typedef struct command {
   int input;
   int output;
   char* argv[MAX_WORDS + 1];
-};
+} Command;
 
 int exec_vect(char *const argv[]) {
-  struct command* commands[(MAX_WORDS + 1) * sizeof(int*)];
+  Command* commands[(MAX_WORDS + 1) * sizeof(int*)];
   int i = 0;
   int c = 0;
   int a = 0;
   int n = 0;
-  struct command cmd;
-  cmd.input = STDIN_FILENO;
-  cmd.output = STDOUT_FILENO;
-  cmd.argv[0] = NULL;
-  commands[c] = &cmd;
+  Command* cmd = malloc(sizeof(Command));
+  cmd->input = STDIN_FILENO;
+  cmd->output = STDOUT_FILENO;
+  cmd->argv[0] = NULL;
+  commands[c] = cmd;
+#ifdef DEBUG
+  fprintf(stderr, "New struct pointer: %p\n", commands[c]);
+#endif
   for (i = 0; argv[i] != NULL; i++) {
     if (strcmp(argv[i], "|") == 0) {
       commands[c]->argv[a] = NULL;
+#ifdef DEBUG
+      fprintf(stderr, "null-terminating command list %d at item %d\n", c, a);
+#endif
       
       int pipes[2];
       pipe(pipes);
+
+#ifdef DEBUG
+      fprintf(stderr, "Created pipe %d -> %d\n", pipes[1], pipes[0]);
+#endif
       
       commands[c]->output = pipes[1];
       c++; // heh
       a = 0;
       
-      struct command cmd;
-      commands[c] = &cmd;
-      commands[c]->input = pipes[0];
-      commands[c]->output = STDOUT_FILENO;
-      commands[c]->argv[0] = NULL;
+      Command *cmd = malloc(sizeof(Command));
+      commands[c] = cmd;
+#ifdef DEBUG
+      fprintf(stderr, "New struct pointer: %p\n", commands[c]);
+      fprintf(stderr, "Assigned output of command %d to pipe %d, and input of command %d to pipe %d\n", c - 1, pipes[1], c, pipes[0]);
+#endif
+      cmd->input = pipes[0];
+      cmd->output = STDOUT_FILENO;
+      cmd->argv[0] = NULL;
     } else {
-      printf("Adding '%s' to command %d\n", argv[i], c);
+#ifdef DEBUG
+      fprintf(stderr, "Adding '%s' to command %d\n", argv[i], c);
+#endif
       commands[c]->argv[a] = malloc(MAX_WORD_LENGTH);
       strcpy(commands[c]->argv[a], argv[i]);
       a++;
     }
   }
+#ifdef DEBUG
+  fprintf(stderr, "null-terminating command list %d at item %d\n", c, a);
+#endif
   commands[c]->argv[a] = NULL;
   c++;
   commands[c] = NULL;
 
   // now, execute all that
   for (i = 0; commands[i] != NULL; i++) {
+#ifdef DEBUG
+    fprintf(stderr, "check commands[%d]\n", i);
+#endif
     if (commands[i]->argv[0] != NULL) {
+#ifdef DEBUG
       fprintf(stderr, "exec command '%s' (%d) input %d output %d\n",
           commands[i]->argv[0], i, commands[i]->input, commands[i]->output);
+#endif
       exec_and_wait(commands[i]->input, commands[i]->output,
           commands[i]->argv[0], commands[i]->argv);
-      fprintf(stderr, "finished\n");
+#ifdef DEBUG
+      fprintf(stderr, "finished - freeing\n");
+#endif
       // clean up
       for (n = 0; commands[i]->argv[n] != NULL; n++) {
         free(commands[i]->argv[n]);
       }
+      free(commands[i]);
     }
   }
   return 0;

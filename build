@@ -1,1 +1,2 @@
-gcc -Wall main.c -o shell -lreadline
+#!/bin/bash
+gcc -Wall main.c -o shell -lreadline "$@"
